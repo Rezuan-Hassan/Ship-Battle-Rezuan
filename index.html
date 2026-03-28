@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ship Battle: Rezuan</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        #bg-video { position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%; z-index: -1; opacity: 0.5; object-fit: cover; }
+        #lobby { position: absolute; top: 0; width: 100%; background: rgba(0,0,0,0.9); padding: 20px; z-index: 100; }
+        canvas { display: block; margin: 0 auto; width: 100%; max-width: 800px; height: auto; }
+        .ui-layer { position: absolute; top: 80px; width: 100%; display: flex; justify-content: space-around; font-weight: bold; pointer-events: none; }
+        .shop { position: fixed; bottom: 20px; left: 20px; display: flex; gap: 10px; }
+        .shop button { padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        #fire-btn { position: fixed; bottom: 20px; right: 20px; width: 90px; height: 90px; border-radius: 50%; background: #ff4757; border: 5px solid white; color: white; font-weight: bold; font-size: 18px; box-shadow: 0 0 15px rgba(255,0,0,0.5); }
+        .btn-connect { padding: 10px; background: #00f2ff; border: none; border-radius: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <video autoplay muted loop id="bg-video"><source src="sea.mp4" type="video/mp4"></video>
+
+    <div id="lobby">
+        <div id="my-id">Your ID: Generating...</div>
+        <input type="text" id="friend-id" placeholder="Friend's ID">
+        <button class="btn-connect" onclick="connectToFriend()">START BATTLE</button>
+    </div>
+
+    <div class="ui-layer">
+        <div>$ <span id="money-display">0</span></div>
+        <div>ROUND: <span id="round-display">1</span>/8</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="shop">
+        <button onclick="buyRepair()">REPAIR ($75)</button>
+        <button onclick="buySpecial()" id="spec-btn">ULTIMATE ($250)</button>
+    </div>
+
+    <button id="fire-btn">FIRE</button>
+
+    <script src="script.js"></script>
+</body>
+</html>
