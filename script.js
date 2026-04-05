@@ -2,25 +2,37 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = 800; canvas.height = 400;
 
-// Fallback drawing if images fail to load
+// Load Images
 const ship1 = new Image(); ship1.src = 'ship1.png';
 const ship2 = new Image(); ship2.src = 'ship2.png';
 
-// 1. PEER SETUP
-const peer = new Peer(); 
+// 1. PEER SETUP (Fixed for GitHub Pages / HTTPS)
+const peer = new Peer(undefined, {
+    host: '0.peerjs.com',
+    port: 443,
+    secure: true,
+    debug: 3 // Level 3 shows all connection details in Console
+});
+
 let conn = null;
 let isHost = false;
 
+// Handle ID Generation
 peer.on('open', (id) => {
-    document.getElementById('my-id').innerText = "Your ID: " + id;
+    console.log("Peer ID Generated: " + id);
+    document.getElementById('my-id').innerText = "YOUR ID: " + id;
 });
 
+// Handle Errors (Crucial for Debugging)
 peer.on('error', (err) => {
-    console.error(err);
-    alert("Connection Error: " + err.type + ". Check if the ID is correct!");
+    console.error("PeerJS Error Type: " + err.type);
+    document.getElementById('my-id').innerText = "Error: " + err.type;
+    if (err.type === 'browser-incompatible') {
+        alert("Your browser does not support WebRTC!");
+    }
 });
 
-// HOST Logic
+// HOST Logic: Someone else connects to you
 peer.on('connection', (connection) => {
     conn = connection;
     isHost = true;
@@ -29,11 +41,12 @@ peer.on('connection', (connection) => {
     requestAnimationFrame(update);
 });
 
-// GUEST Logic
+// GUEST Logic: You connect to someone else
 function connectToFriend() {
     const friendID = document.getElementById('friend-id').value.trim();
     if (!friendID) return alert("Please paste an ID!");
     
+    document.getElementById('my-id').innerText = "Connecting...";
     conn = peer.connect(friendID);
     isHost = false;
 
@@ -60,6 +73,7 @@ let moveDir = 0;
 function setupData() {
     conn.on('data', (d) => {
         if (isHost) {
+            // Host processes Guest's inputs
             if (d.type === 'move') p2.x = Math.max(0, Math.min(700, p2.x + d.dx));
             if (d.type === 'fire') bullets.push({ x: p2.x + 50, y: p2.y, vy: -7 });
             if (d.type === 'shop') {
@@ -70,11 +84,15 @@ function setupData() {
                 }
             }
         } else {
-            // Guest receives full state from host
+            // Guest receives full game state from Host
             p1 = d.p1; p2 = d.p2; bullets = d.bullets; gameState = d.gameState;
-            
             if(gameState.gameOver) showGameOver();
         }
+    });
+
+    conn.on('close', () => {
+        alert("Opponent Disconnected!");
+        location.reload();
     });
 }
 
@@ -84,36 +102,35 @@ function update() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // HOST computes logic
     if (isHost && conn && conn.open) {
+        // Handle Host Movement
         p1.x = Math.max(0, Math.min(700, p1.x + moveDir));
         
-        // Reverse iterate to safely remove off-screen or hit bullets
+        // Bullet Collision & Memory Management
         for (let i = bullets.length - 1; i >= 0; i--) {
             let b = bullets[i];
             b.y += b.vy;
             let hit = false;
 
-            // Hit P1 (Host)
+            // Hit P1 (Host) from P2's bullet
             if (b.vy < 0 && b.y < p1.y + 80 && b.x > p1.x && b.x < p1.x + 100) {
                 p1.shields > 0 ? p1.shields-- : p1.health -= 10;
-                p2.money += 25; // Reward P2
+                p2.money += 25; 
                 hit = true;
             }
-            // Hit P2 (Guest)
+            // Hit P2 (Guest) from P1's bullet
             else if (b.vy > 0 && b.y > p2.y && b.x > p2.x && b.x < p2.x + 100) {
                 p2.shields > 0 ? p2.shields-- : p2.health -= 10;
-                p1.money += 25; // Reward P1
+                p1.money += 25; 
                 hit = true;
             }
 
-            // Clean up bullet
             if (hit || b.y < 0 || b.y > canvas.height) {
                 bullets.splice(i, 1);
             }
         }
 
-        // Round Logic Fix
+        // Win/Loss Condition
         if (p1.health <= 0 || p2.health <= 0) {
             if (p1.health <= 0) p2.score++;
             if (p2.health <= 0) p1.score++;
@@ -125,19 +142,18 @@ function update() {
                 gameState.winner = p1.score > p2.score ? "HOST WINS!" : (p2.score > p1.score ? "GUEST WINS!" : "DRAW!");
                 showGameOver();
             } else {
-                // Reset round stats
                 p1.health = 100; p2.health = 100;
                 p1.shields = 6; p2.shields = 6;
                 bullets = [];
             }
         }
         
-        // Sync to Guest
+        // Broadcast state to Guest
         conn.send({ p1, p2, bullets, gameState });
     } 
-    // GUEST sends inputs
-    else if (conn && conn.open && !isHost && moveDir !== 0) {
-        conn.send({ type: 'move', dx: moveDir });
+    else if (conn && conn.open && !isHost) {
+        // Guest only sends movement if actually moving to save bandwidth
+        if(moveDir !== 0) conn.send({ type: 'move', dx: moveDir });
     }
 
     drawGame();
@@ -148,42 +164,39 @@ function update() {
     }
 }
 
-// 5. DRAWING ROUTINE
+// 5. DRAWING
 function drawGame() {
-    // Draw P1 (Top / Host)
+    // P1 (Top)
     ctx.save(); 
     ctx.translate(p1.x+50, p1.y+40); 
     ctx.rotate(Math.PI); 
-    if(ship1.complete && ship1.naturalHeight !== 0) ctx.drawImage(ship1, -50, -40, 100, 80);
-    else { ctx.fillStyle = 'blue'; ctx.fillRect(-50, -40, 100, 80); } // Fallback
+    if(ship1.complete) ctx.drawImage(ship1, -50, -40, 100, 80);
+    else { ctx.fillStyle = '#00f2ff'; ctx.fillRect(-50, -40, 100, 80); }
     ctx.restore();
-    drawBars(p1, false);
+    drawStatusBars(p1, false);
 
-    // Draw P2 (Bottom / Guest)
-    if(ship2.complete && ship2.naturalHeight !== 0) ctx.drawImage(ship2, p2.x, p2.y, 100, 80);
-    else { ctx.fillStyle = 'red'; ctx.fillRect(p2.x, p2.y, 100, 80); } // Fallback
-    drawBars(p2, true);
+    // P2 (Bottom)
+    if(ship2.complete) ctx.drawImage(ship2, p2.x, p2.y, 100, 80);
+    else { ctx.fillStyle = '#ff4757'; ctx.fillRect(p2.x, p2.y, 100, 80); }
+    drawStatusBars(p2, true);
 
-    // Draw Bullets
-    ctx.fillStyle = '#ffbd2e'; 
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = 'yellow';
-    bullets.forEach(b => {
-        ctx.fillRect(b.x, b.y, 6, 15);
-    });
-    ctx.shadowBlur = 0; // reset
+    // Bullets
+    ctx.fillStyle = '#ffff00';
+    bullets.forEach(b => ctx.fillRect(b.x - 2, b.y, 4, 12));
 }
 
-function drawBars(ship, isBottom) {
-    let barY = isBottom ? ship.y + 90 : ship.y - 15;
-    // Health
-    ctx.fillStyle = '#ff4757'; ctx.fillRect(ship.x, barY, 100, 5);
-    ctx.fillStyle = '#27c93f'; ctx.fillRect(ship.x, barY, Math.max(0, ship.health), 5);
-    // Shields
-    ctx.fillStyle = 'rgba(0, 242, 255, 0.8)';
-    for(let i=0; i<ship.shields; i++) {
+function drawStatusBars(ship, isBottom) {
+    let barY = isBottom ? ship.y + 85 : ship.y - 10;
+    // Health Bar
+    ctx.fillStyle = '#444'; ctx.fillRect(ship.x, barY, 100, 6);
+    ctx.fillStyle = ship.health > 30 ? '#39ff14' : '#ff4757';
+    ctx.fillRect(ship.x, barY, Math.max(0, ship.health), 6);
+    
+    // Shield Orbs
+    ctx.fillStyle = '#00f2ff';
+    for(let i=0; i < ship.shields; i++) {
         ctx.beginPath();
-        ctx.arc(ship.x + 10 + (i*16), isBottom ? ship.y - 10 : ship.y + 90, 4, 0, Math.PI*2);
+        ctx.arc(ship.x + 8 + (i * 16), isBottom ? ship.y - 15 : ship.y + 95, 4, 0, Math.PI*2);
         ctx.fill();
     }
 }
@@ -202,7 +215,7 @@ function showGameOver() {
     document.getElementById('score-text').innerText = `Host: ${p1.score} | Guest: ${p2.score}`;
 }
 
-// 6. SHOP LOGIC
+// 6. SHOP
 function buyRepair() {
     if (!conn || !conn.open) return;
     if (isHost && p1.money >= 75) { p1.money -= 75; p1.health = Math.min(100, p1.health + 30); }
@@ -218,31 +231,31 @@ function buyUlti() {
     else if (!isHost) { conn.send({ type: 'shop', item: 'ulti' }); }
 }
 
-// 7. INPUTS (Mouse, Touch, and Keyboard)
+// 7. INPUTS
 const handleMove = (dir) => moveDir = dir;
-const fireLogic = () => {
+const fireAction = () => {
     if (!conn || !conn.open || gameState.gameOver) return;
-    if (isHost) bullets.push({ x: p1.x + 47, y: p1.y + 80, vy: 7 });
+    if (isHost) bullets.push({ x: p1.x + 50, y: p1.y + 80, vy: 7 });
     else conn.send({ type: 'fire' });
 };
 
-// Touch & Mouse
-const btnL = document.getElementById('left-btn');
-const btnR = document.getElementById('right-btn');
-const btnF = document.getElementById('fire-btn');
+// Touch/Mouse Controls
+const lBtn = document.getElementById('left-btn');
+const rBtn = document.getElementById('right-btn');
+const fBtn = document.getElementById('fire-btn');
 
-btnL.onmousedown = btnL.ontouchstart = (e) => { e.preventDefault(); handleMove(-6); };
-btnR.onmousedown = btnR.ontouchstart = (e) => { e.preventDefault(); handleMove(6); };
-window.onmouseup = window.ontouchend = () => handleMove(0);
+lBtn.onmousedown = lBtn.ontouchstart = (e) => { e.preventDefault(); handleMove(-7); };
+rBtn.onmousedown = rBtn.ontouchstart = (e) => { e.preventDefault(); handleMove(7); };
+fBtn.onmousedown = fBtn.ontouchstart = (e) => { e.preventDefault(); fireAction(); };
 
-btnF.onmousedown = btnF.ontouchstart = (e) => { e.preventDefault(); fireLogic(); };
+window.onmouseup = window.ontouchend = (e) => { handleMove(0); };
 
-// Keyboard (For PC Testing)
+// Keyboard Support
 window.onkeydown = (e) => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') handleMove(-6);
-    if(e.key === 'ArrowRight' || e.key === 'd') handleMove(6);
-    if(e.key === ' ' || e.key === 'Enter') fireLogic();
+    if(e.key === 'ArrowLeft' || e.key === 'a') handleMove(-7);
+    if(e.key === 'ArrowRight' || e.key === 'd') handleMove(7);
+    if(e.key === ' ' || e.key === 'Enter') fireAction();
 };
 window.onkeyup = (e) => {
-    if(['ArrowLeft', 'a', 'ArrowRight', 'd'].includes(e.key)) handleMove(0);
+    if(['a','d','ArrowLeft','ArrowRight'].includes(e.key)) handleMove(0);
 };
