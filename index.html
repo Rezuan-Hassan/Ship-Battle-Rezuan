@@ -6,45 +6,87 @@
     <title>Ship-Battle-Rezuan</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
         #bg-video { position: fixed; right: 0; bottom: 0; min-width: 100%; min-height: 100%; z-index: -1; opacity: 0.4; object-fit: cover; }
         #game-title { position: absolute; top: 10px; width: 100%; text-align: center; font-size: 20px; font-weight: bold; color: #00f2ff; text-shadow: 0 0 10px #00f2ff; z-index: 5; }
-        #lobby { position: absolute; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
-        .ui-layer { position: absolute; top: 50px; width: 100%; display: flex; justify-content: space-around; font-weight: bold; pointer-events: none; }
-        canvas { display: block; margin: 0 auto; width: 100%; max-width: 800px; height: auto; }
-        .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
+        
+        /* Screens */
+        #lobby, #game-over { position: absolute; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        #game-over { display: none; }
+        #game-over h2 { color: #39ff14; font-size: 40px; margin-bottom: 10px; }
+
+        .ui-layer { position: absolute; top: 50px; width: 100%; display: flex; justify-content: space-around; font-weight: bold; pointer-events: none; z-index: 10;}
+        .player-stats { display: flex; flex-direction: column; align-items: center; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 8px; border: 1px solid #00f2ff;}
+        
+        canvas { display: block; margin: 0 auto; width: 100%; max-width: 800px; height: auto; border: 1px solid rgba(0, 242, 255, 0.2); }
+        
+        /* Controls & Shop */
+        .controls { position: fixed; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; z-index: 10;}
         .move-btns { display: flex; gap: 10px; }
-        .btn { width: 70px; height: 70px; background: rgba(0,242,255,0.2); border: 2px solid #00f2ff; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-        #fire-btn { width: 90px; height: 90px; border-radius: 50%; background: #ff4757; border: 4px solid white; color: white; font-weight: bold; }
-        .shop { position: fixed; top: 90px; right: 10px; display: flex; flex-direction: column; gap: 5px; }
-        .shop-btn { padding: 8px; background: #28a745; border: none; border-radius: 5px; color: white; font-size: 11px; }
+        .btn { width: 70px; height: 70px; background: rgba(0,242,255,0.2); border: 2px solid #00f2ff; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; user-select: none;}
+        .btn:active { background: rgba(0,242,255,0.5); }
+        #fire-btn { width: 90px; height: 90px; border-radius: 50%; background: #ff4757; border: 4px solid white; color: white; font-weight: bold; cursor: pointer; display:flex; align-items:center; justify-content:center; user-select: none;}
+        #fire-btn:active { background: #ff1e34; transform: scale(0.95); }
+        
+        .shop { position: fixed; top: 120px; right: 10px; display: flex; flex-direction: column; gap: 10px; z-index: 10;}
+        .shop-btn { padding: 10px; background: #28a745; border: 2px solid #1e7e34; border-radius: 5px; color: white; font-size: 11px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.5);}
+        .shop-btn:active { transform: translateY(2px); }
+        .shop-btn.ulti { background: #8e44ad; border-color: #6c3483; }
+        
         input { padding: 12px; border-radius: 8px; border: 2px solid #00f2ff; background: #222; color: white; margin: 10px; text-align: center; }
+        button.start-btn { padding:12px 24px; background:#00f2ff; color: black; font-weight: bold; border:none; border-radius:8px; cursor: pointer; margin-top: 10px;}
     </style>
 </head>
 <body>
     <video autoplay muted loop playsinline id="bg-video"><source src="sea.mp4" type="video/mp4"></video>
+    
     <div id="game-title">SHIP-BATTLE-REZUAN</div>
+    
     <div id="lobby">
-        <div id="my-id">Generating ID...</div>
-        <input type="text" id="friend-id" placeholder="Paste Friend's ID">
-        <button onclick="connectToFriend()" style="padding:12px; background:#00f2ff; border:none; border-radius:8px;">START BATTLE</button>
+        <h3 style="color:#00f2ff">MULTIPLAYER LOBBY</h3>
+        <div id="my-id" style="margin-bottom: 20px; font-family: monospace; background: #333; padding: 10px; border-radius: 5px;">Generating ID...</div>
+        <input type="text" id="friend-id" placeholder="Paste Friend's ID Here">
+        <button class="start-btn" onclick="connectToFriend()">START BATTLE</button>
     </div>
+
+    <div id="game-over">
+        <h2 id="winner-text">GAME OVER</h2>
+        <p id="score-text">Host: 0 | Guest: 0</p>
+        <button class="start-btn" onclick="location.reload()">PLAY AGAIN</button>
+    </div>
+
     <div class="ui-layer">
-        <div>$ <span id="money-display">0</span></div>
-        <div>ROUND <span id="round-display">1</span>/8</div>
+        <div class="player-stats">
+            <span style="font-size:10px; color:#aaa;">P1 (HOST)</span>
+            <span>$ <span id="p1-money">0</span></span>
+            <span style="color:#39ff14">WINS: <span id="p1-score">0</span></span>
+        </div>
+        <div style="font-size: 24px; text-shadow: 0 0 10px #fff;">ROUND <span id="round-display">1</span>/8</div>
+        <div class="player-stats">
+            <span style="font-size:10px; color:#aaa;">P2 (GUEST)</span>
+            <span>$ <span id="p2-money">0</span></span>
+            <span style="color:#39ff14">WINS: <span id="p2-score">0</span></span>
+        </div>
     </div>
+
     <div class="shop">
         <button class="shop-btn" onclick="buyRepair()">REPAIR ($75)</button>
-        <button class="shop-btn" onclick="buyUlti()">ULTI ($250)</button>
+        <button class="shop-btn ulti" onclick="buyUlti()">ULTI ($250)</button>
     </div>
+
     <canvas id="gameCanvas"></canvas>
+
     <div class="controls">
         <div class="move-btns">
             <div class="btn" id="left-btn">LEFT</div>
             <div class="btn" id="right-btn">RIGHT</div>
         </div>
-        <div id="fire-btn" style="display:flex; align-items:center; justify-content:center;">FIRE</div>
+        <div id="fire-btn">FIRE</div>
     </div>
-    <script src="script.js"></script>
-</body>
-</html>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800; canvas.height = 400;
+
+        // Fallback
